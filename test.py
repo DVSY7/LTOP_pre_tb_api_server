@@ -9,14 +9,12 @@ import time
 PORT = "COM8"
 BAUDRATE = 115200
 
-# 우선 1회만 테스트
 TEST_COUNT = 1
-
 RESPONSE_TIMEOUT = 15
 
 HOST = "ltop-pre-tb-api-server.onrender.com"
-PATH = "/api/v1/tb/test-data"
-PORT_HTTPS = 443
+PATH = "/api/v1/tb/data"
+HTTPS_PORT = 443
 
 
 # ============================================================
@@ -29,7 +27,10 @@ def send_command(ser, command, timeout=2):
 
     print(f"\n[SEND] {command}")
 
-    ser.write((command + "\r\n").encode())
+    ser.write(
+        (command + "\r\n").encode()
+    )
+
     ser.flush()
 
     end_time = time.time() + timeout
@@ -48,7 +49,10 @@ def send_command(ser, command, timeout=2):
 
             response += data
 
-        if "\nOK" in response or "\nERROR" in response:
+        if (
+            "\nOK" in response
+            or "\nERROR" in response
+        ):
             break
 
         time.sleep(0.01)
@@ -71,7 +75,10 @@ def execute_http(ser, timeout=15):
 
     start_time = time.perf_counter()
 
-    ser.write(b"AT*WHTTP=3\r\n")
+    ser.write(
+        b"AT*WHTTP=3\r\n"
+    )
+
     ser.flush()
 
     response = ""
@@ -90,7 +97,6 @@ def execute_http(ser, timeout=15):
 
             response += data
 
-            # 정상 완료
             if "*WHTTPR:COMPLETED" in response:
 
                 rtt = (
@@ -103,7 +109,6 @@ def execute_http(ser, timeout=15):
 
                 return True, response, rtt
 
-            # 실행 실패
             if "*WHTTPR:EXEC_FAILED" in response:
 
                 rtt = (
@@ -118,7 +123,6 @@ def execute_http(ser, timeout=15):
 
         time.sleep(0.01)
 
-    # Timeout
     rtt = (
         time.perf_counter()
         - start_time
@@ -131,17 +135,16 @@ def execute_http(ser, timeout=15):
 
 
 # ============================================================
-# API ACK 확인
+# ACK 확인
 # ============================================================
 
 def check_ack(response, equip_id):
 
-    expected_result = '"result":"OK"'
-    expected_equip = f'"equip_id":"{equip_id}"'
-
     return (
-        expected_result in response
-        and expected_equip in response
+        '"result":"OK"' in response
+        and
+        f'"equip_id":"{equip_id}"'
+        in response
     )
 
 
@@ -158,12 +161,18 @@ def main():
     failed_tests = []
 
     print("=" * 60)
-    print("WD-L700K LTE TB 데이터 길이 테스트")
-    print("5개 필드 전송")
+    print("WD-L700K LTE TB Protocol v1 시험")
+    print("Short Key-Value 방식")
     print("=" * 60)
 
     # ========================================================
-    # 테스트 데이터
+    # Protocol Version
+    # ========================================================
+
+    protocol_version = 1
+
+    # ========================================================
+    # 실제 TB 데이터
     # ========================================================
 
     site_id = 1
@@ -173,28 +182,56 @@ def main():
     inner_temp = 25.4
     corrol_volt = -920.5
 
+    op_status_id = 1
+    op_mode_id = 1
+    error_code_id = 0
+
+    area_id = 1
+    branch_id = 1
+
+    inner_humidity = 55.2
+
+    max_set_volt = -850
+    min_set_volt = -2500
+
     # ========================================================
-    # 실제 전송 DATA 생성
+    # 축약 Protocol Payload 생성
     # ========================================================
 
     payload = (
-        f"site_id={site_id}"
-        f"&equip_id={equip_id}"
-        f"&bettery={bettery}"
-        f"&inner_temp={inner_temp}"
-        f"&corrol_volt={corrol_volt}"
+        f"v={protocol_version}"
+        f"&s={site_id}"
+        f"&e={equip_id}"
+        f"&b={bettery}"
+        f"&t={inner_temp}"
+        f"&cv={corrol_volt}"
+        f"&os={op_status_id}"
+        f"&om={op_mode_id}"
+        f"&ec={error_code_id}"
+        f"&a={area_id}"
+        f"&br={branch_id}"
+        f"&h={inner_humidity}"
+        f"&max={max_set_volt}"
+        f"&min={min_set_volt}"
     )
 
-    # WD-L700K에서 & 처리 문제 방지를 위해
+    payload_bytes = len(
+        payload.encode("utf-8")
+    )
+
+    # WD-L700K에서 & 처리를 위해
     # 전체 DATA를 작은따옴표로 감싼다.
     data = f"'{payload}'"
+
+    print("\n[PROTOCOL]")
+    print("Version : 1")
 
     print("\n[PAYLOAD]")
     print(payload)
 
     print(
         f"\nPayload length : "
-        f"{len(payload.encode('utf-8'))} bytes"
+        f"{payload_bytes} bytes"
     )
 
     # ========================================================
@@ -234,10 +271,12 @@ def main():
         )
 
         print("\n" + "=" * 60)
-        print("TB 데이터 전송 테스트 시작")
+        print("TB Protocol v1 전송 시작")
         print("=" * 60)
 
-        total_start = time.perf_counter()
+        total_start = (
+            time.perf_counter()
+        )
 
         # ====================================================
         # 전송
@@ -253,26 +292,27 @@ def main():
             )
 
             # ------------------------------------------------
-            # HTTP 설정
+            # WHTTP 설정
             # ------------------------------------------------
 
             command = (
                 "AT*WHTTP=1,"
                 "POST,"
-                f"{HOST}"
-                f"{PATH},"
-                f"{PORT_HTTPS},,,"
+                f"{HOST}{PATH},"
+                f"{HTTPS_PORT},,,"
                 f"{data}"
             )
 
-            config_response = send_command(
-                ser,
-                command,
-                timeout=2
+            config_response = (
+                send_command(
+                    ser,
+                    command,
+                    timeout=2
+                )
             )
 
             # ------------------------------------------------
-            # HTTP 설정 결과 확인
+            # 설정 성공 확인
             # ------------------------------------------------
 
             if "OK" not in config_response:
@@ -280,16 +320,19 @@ def main():
                 print(
                     f"[FAIL] "
                     f"test={test_no} "
-                    f"HTTP 설정 실패"
+                    f"WHTTP 설정 실패"
                 )
 
                 fail_count += 1
-                failed_tests.append(test_no)
+
+                failed_tests.append(
+                    test_no
+                )
 
                 continue
 
             # ------------------------------------------------
-            # 실제 HTTPS 요청 실행
+            # HTTPS 요청 실행
             # ------------------------------------------------
 
             completed, response, rtt = (
@@ -317,18 +360,23 @@ def main():
                 print(
                     f"\n[SUCCESS] "
                     f"equip_id={equip_id} "
-                    f"RTT={rtt * 1000:.0f} ms"
+                    f"RTT="
+                    f"{rtt * 1000:.0f} ms"
                 )
 
             else:
 
                 fail_count += 1
-                failed_tests.append(test_no)
+
+                failed_tests.append(
+                    test_no
+                )
 
                 print(
                     f"\n[FAIL] "
                     f"test={test_no} "
-                    f"RTT={rtt * 1000:.0f} ms"
+                    f"RTT="
+                    f"{rtt * 1000:.0f} ms"
                 )
 
         total_elapsed = (
@@ -342,26 +390,30 @@ def main():
 
     print("\n")
     print("=" * 60)
-    print("LTE TB 데이터 길이 테스트 결과")
+    print("TB Protocol v1 시험 결과")
     print("=" * 60)
 
     print(
-        f"Payload       : "
-        f"{len(payload.encode('utf-8'))} bytes"
+        f"Protocol       : v1"
     )
 
     print(
-        f"총 송신       : "
+        f"Payload        : "
+        f"{payload_bytes} bytes"
+    )
+
+    print(
+        f"총 송신        : "
         f"{TEST_COUNT}"
     )
 
     print(
-        f"성공          : "
+        f"성공           : "
         f"{success_count}"
     )
 
     print(
-        f"실패          : "
+        f"실패           : "
         f"{fail_count}"
     )
 
@@ -372,7 +424,7 @@ def main():
     )
 
     print(
-        f"성공률        : "
+        f"성공률         : "
         f"{success_rate:.1f}%"
     )
 
@@ -384,32 +436,27 @@ def main():
         )
 
         print(
-            f"평균 RTT      : "
+            f"평균 RTT       : "
             f"{avg_rtt * 1000:.0f} ms"
         )
 
         print(
-            f"최소 RTT      : "
+            f"최소 RTT       : "
             f"{min(rtt_list) * 1000:.0f} ms"
         )
 
         print(
-            f"최대 RTT      : "
+            f"최대 RTT       : "
             f"{max(rtt_list) * 1000:.0f} ms"
         )
 
     print(
-        f"전체 소요시간 : "
+        f"전체 소요시간  : "
         f"{total_elapsed:.2f} sec"
     )
 
     print(
-        f"요청당 총시간 : "
-        f"{total_elapsed / TEST_COUNT:.3f} sec"
-    )
-
-    print(
-        f"실패 Test     : "
+        f"실패 Test      : "
         f"{failed_tests}"
     )
 

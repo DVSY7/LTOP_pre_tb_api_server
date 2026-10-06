@@ -1,71 +1,87 @@
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, HTTPException
 
 app = FastAPI(
     title="PRE TB API",
-    version="0.2.0"
+    version="0.3.0"
 )
 
 
 @app.get("/health")
 def health():
-    return {"status": "OK"}
+    return {
+        "status": "OK"
+    }
 
 
 @app.post("/api/v1/tb/data")
 def receive_tb_data(
-    site_id: int = Form(...),
-    equip_id: str = Form(...),
-    bettery: float = Form(...),
-    inner_temp: float = Form(...),
-    corrol_volt: float = Form(...),
-    op_status_id: int = Form(...),
-    op_mode_id: int = Form(...),
-    error_code_id: int = Form(...),
-    area_id: int | None = Form(None),
-    branch_id: int | None = Form(None),
-    inner_humidity: float | None = Form(None),
-    max_set_volt: float = Form(-850),
-    min_set_volt: float = Form(-2500)
+    v: int = Form(...),
+    s: int = Form(...),
+    e: str = Form(...),
+    b: float = Form(...),
+    t: float = Form(...),
+    cv: float = Form(...),
+    os: int = Form(...),
+    om: int = Form(...),
+    ec: int = Form(...),
+    a: int | None = Form(None),
+    br: int | None = Form(None),
+    h: float | None = Form(None),
+    max: float = Form(-850),
+    min: float = Form(-2500)
 ):
-    print("\n[TB DATA RECEIVED]")
 
-    print(f"site_id        = {site_id}")
-    print(f"equip_id       = {equip_id}")
-    print(f"bettery        = {bettery}")
-    print(f"inner_temp     = {inner_temp}")
-    print(f"corrol_volt    = {corrol_volt}")
-    print(f"op_status_id   = {op_status_id}")
-    print(f"op_mode_id     = {op_mode_id}")
-    print(f"error_code_id  = {error_code_id}")
-    print(f"area_id        = {area_id}")
-    print(f"branch_id      = {branch_id}")
-    print(f"inner_humidity = {inner_humidity}")
-    print(f"max_set_volt   = {max_set_volt}")
-    print(f"min_set_volt   = {min_set_volt}")
+    # --------------------------------------------------------
+    # Protocol Version 확인
+    # --------------------------------------------------------
 
-    return {
-        "result": "OK",
-        "equip_id": equip_id
+    if v != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported protocol version"
+        )
+
+    # --------------------------------------------------------
+    # 통신용 필드 → DB 컬럼명 매핑
+    # --------------------------------------------------------
+
+    tb_data = {
+        "site_id": s,
+        "equip_id": e,
+        "bettery": b,
+        "inner_temp": t,
+        "corrol_volt": cv,
+        "op_status_id": os,
+        "op_mode_id": om,
+        "error_code_id": ec,
+        "area_id": a,
+        "branch_id": br,
+        "inner_humidity": h,
+        "max_set_volt": max,
+        "min_set_volt": min
     }
 
-@app.post("/api/v1/tb/test-data")
-def receive_tb_test_data(
-    site_id: int = Form(...),
-    equip_id: str = Form(...),
-    bettery: float = Form(...),
-    inner_temp: float = Form(...),
-    corrol_volt: float = Form(...)
-):
-    print(
-        f"[TB TEST RECV] "
-        f"site_id={site_id}, "
-        f"equip_id={equip_id}, "
-        f"bettery={bettery}, "
-        f"inner_temp={inner_temp}, "
-        f"corrol_volt={corrol_volt}"
-    )
+    # --------------------------------------------------------
+    # 현재는 DB 저장 전이므로 로그만 출력
+    # --------------------------------------------------------
+
+    print("\n[TB DATA RECEIVED]")
+    print(f"protocol_version = {v}")
+
+    for key, value in tb_data.items():
+        print(f"{key:15} = {value}")
+
+    # --------------------------------------------------------
+    # 추후 여기에서 DB INSERT
+    # --------------------------------------------------------
+
+    # insert_stat_tb(tb_data)
+
+    # --------------------------------------------------------
+    # ACK
+    # --------------------------------------------------------
 
     return {
         "result": "OK",
-        "equip_id": equip_id
+        "equip_id": e
     }
