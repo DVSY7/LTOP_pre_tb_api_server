@@ -1,54 +1,49 @@
 from fastapi import FastAPI, Form
-from pydantic import BaseModel
-
 
 app = FastAPI(
     title="PRE TB API",
-    version="0.1.0"
+    version="0.2.0"
 )
 
 
-# TB에서 받을 테스트 데이터 형식
-class TBData(BaseModel):
-    sequence: int
-    message: str
-
-
-# 서버가 살아있는지 확인
 @app.get("/health")
 def health():
-    return {
-        "status": "OK"
-    }
+    return {"status": "OK"}
 
 
-# TB 데이터 수신 - JSON
 @app.post("/api/v1/tb/data")
-def receive_tb_data(data: TBData):
-
-    print(
-        f"[RECV] sequence={data.sequence}, "
-        f"message={data.message}"
-    )
-
-    return {
-        "result": "OK",
-        "sequence": data.sequence
-    }
-
-
-# LTE 모뎀 통신 테스트용 - Form
-@app.post("/api/v1/tb/test")
-def receive_tb_test(
-    sequence: int = Form(...),
-    message: str = Form(...)
+def receive_tb_data(
+    site_id: int = Form(...),
+    equip_id: str = Form(...),
+    bettery: float = Form(...),
+    inner_temp: float = Form(...),
+    corrol_volt: float = Form(...),
+    op_status_id: int = Form(...),
+    op_mode_id: int = Form(...),
+    error_code_id: int = Form(...),
+    area_id: int | None = Form(None),
+    branch_id: int | None = Form(None),
+    inner_humidity: float | None = Form(None),
+    max_set_volt: float = Form(-850),
+    min_set_volt: float = Form(-2500)
 ):
-    print(
-        f"[LTE RECV] sequence={sequence}, "
-        f"message={message}"
-    )
+    print("\n[TB DATA RECEIVED]")
+
+    print(f"site_id        = {site_id}")
+    print(f"equip_id       = {equip_id}")
+    print(f"bettery        = {bettery}")
+    print(f"inner_temp     = {inner_temp}")
+    print(f"corrol_volt    = {corrol_volt}")
+    print(f"op_status_id   = {op_status_id}")
+    print(f"op_mode_id     = {op_mode_id}")
+    print(f"error_code_id  = {error_code_id}")
+    print(f"area_id        = {area_id}")
+    print(f"branch_id      = {branch_id}")
+    print(f"inner_humidity = {inner_humidity}")
+    print(f"max_set_volt   = {max_set_volt}")
+    print(f"min_set_volt   = {min_set_volt}")
 
     return {
         "result": "OK",
-        "sequence": sequence
+        "equip_id": equip_id
     }

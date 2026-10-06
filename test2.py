@@ -4,19 +4,11 @@ import time
 PORT = "COM8"
 BAUDRATE = 115200
 
-# 처음에는 1건으로 확인
-# 정상 확인 후 100으로 변경
-TEST_COUNT = 1
-
+TEST_COUNT = 100
 RESPONSE_TIMEOUT = 15
 
 
-# ============================================================
-# AT 명령 전송
-# ============================================================
-
 def send_command(ser, command, timeout=2):
-
     ser.reset_input_buffer()
 
     print(f"\n[SEND] {command}")
@@ -28,9 +20,7 @@ def send_command(ser, command, timeout=2):
     response = ""
 
     while time.time() < end_time:
-
         if ser.in_waiting:
-
             data = ser.read(
                 ser.in_waiting
             ).decode(
@@ -51,10 +41,6 @@ def send_command(ser, command, timeout=2):
     return response
 
 
-# ============================================================
-# HTTP 실행
-# ============================================================
-
 def execute_http(ser, timeout=15):
 
     ser.reset_input_buffer()
@@ -72,7 +58,6 @@ def execute_http(ser, timeout=15):
     while time.time() < deadline:
 
         if ser.in_waiting:
-
             data = ser.read(
                 ser.in_waiting
             ).decode(
@@ -82,7 +67,6 @@ def execute_http(ser, timeout=15):
 
             response += data
 
-            # 정상 완료
             if "*WHTTPR:COMPLETED" in response:
 
                 rtt = (
@@ -95,7 +79,6 @@ def execute_http(ser, timeout=15):
 
                 return True, response, rtt
 
-            # HTTP 실행 실패
             if "*WHTTPR:EXEC_FAILED" in response:
 
                 rtt = (
@@ -110,7 +93,6 @@ def execute_http(ser, timeout=15):
 
         time.sleep(0.01)
 
-    # Timeout
     rtt = (
         time.perf_counter()
         - start_time
@@ -122,21 +104,13 @@ def execute_http(ser, timeout=15):
     return False, response, rtt
 
 
-# ============================================================
-# API ACK 확인
-# ============================================================
-
-def check_ack(response, equip_id):
+def check_ack(response, sequence):
 
     return (
         '"result":"OK"' in response
-        and f'"equip_id":"{equip_id}"' in response
+        and f'"sequence":{sequence}' in response
     )
 
-
-# ============================================================
-# Main
-# ============================================================
 
 def main():
 
@@ -144,46 +118,12 @@ def main():
     fail_count = 0
 
     rtt_list = []
-    failed_tests = []
+    failed_sequences = []
 
     print("=" * 60)
-    print("WD-L700K LTE TB 데이터 통신 시험")
-    print("실제 stat_tb 컬럼 기반 데이터")
+    print("WD-L700K LTE 최적화 통신 시험")
+    print("초기 설정 1회 + DATA만 변경")
     print("=" * 60)
-
-    # ========================================================
-    # 테스트용 TB 데이터
-    # ========================================================
-
-    # DB 자동 생성
-    #
-    # t_no         -> AUTO_INCREMENT
-    # measure_time -> CURRENT_TIMESTAMP
-    #
-    # 따라서 위 두 값은 TB에서 전송하지 않음
-
-    site_id = 1
-    equip_id = "TB001"
-
-    bettery = 3.7
-    inner_temp = 25.4
-    corrol_volt = -920.5
-
-    op_status_id = 1
-    op_mode_id = 1
-    error_code_id = 0
-
-    area_id = 1
-    branch_id = 1
-
-    inner_humidity = 55.2
-
-    max_set_volt = -850
-    min_set_volt = -2500
-
-    # ========================================================
-    # Serial 연결
-    # ========================================================
 
     with serial.Serial(
         port=PORT,
@@ -193,91 +133,94 @@ def main():
 
         time.sleep(1)
 
-        # ----------------------------------------------------
-        # LTE 상태 확인
-        # ----------------------------------------------------
+        # ---------------------------------
+        # 1. 기본 통신 상태 확인
+        # ---------------------------------
 
         send_command(ser, "AT")
         send_command(ser, "AT+CGATT?")
         send_command(ser, "AT+CGACT?")
         send_command(ser, "AT+CGPADDR=1")
 
+        # ---------------------------------
+        # 2. HTTP 설정 - 최초 1회만
+        # ---------------------------------
+
         print("\n" + "=" * 60)
-        print("TB 데이터 전송 테스트 시작")
+        print("HTTP 기본 설정")
+        print("=" * 60)
+
+        initial_command = (
+            "AT*WHTTP=1,"
+            "POST,"
+            "ltop-pre-tb-api-server.onrender.com"
+            "/api/v1/tb/test,"
+            "443"
+        )
+
+        response = send_command(
+            ser,
+            initial_command,
+            timeout=2
+        )
+
+        if "OK" not in response:
+            print("초기 HTTP 설정 실패")
+            return
+
+        # ---------------------------------
+        # 3. 100회 시험
+        # ---------------------------------
+
+        print("\n" + "=" * 60)
+        print("100회 최적화 테스트 시작")
         print("=" * 60)
 
         total_start = time.perf_counter()
 
-        # ====================================================
-        # 데이터 전송
-        # ====================================================
-
-        for test_no in range(
+        for sequence in range(
             1,
             TEST_COUNT + 1
         ):
 
             print(
-                f"\n[{test_no}/{TEST_COUNT}]"
+                f"\n[{sequence}/{TEST_COUNT}]"
             )
 
-            # ------------------------------------------------
-            # 실제 TB 데이터 생성
-            # ------------------------------------------------
+            # -----------------------------
+            # DATA만 변경
+            # -----------------------------
 
             data = (
-                "'"
-                f"site_id={site_id}"
-                f"&equip_id={equip_id}"
-                f"&bettery={bettery}"
-                f"&inner_temp={inner_temp}"
-                f"&corrol_volt={corrol_volt}"
-                f"&op_status_id={op_status_id}"
-                f"&op_mode_id={op_mode_id}"
-                f"&error_code_id={error_code_id}"
-                f"&area_id={area_id}"
-                f"&branch_id={branch_id}"
-                f"&inner_humidity={inner_humidity}"
-                f"&max_set_volt={max_set_volt}"
-                f"&min_set_volt={min_set_volt}"
-                "'"
+                f"'sequence={sequence}"
+                f"&message=TEST'"
             )
 
-            # ------------------------------------------------
-            # 매회 전체 HTTP 설정
-            # ------------------------------------------------
-
-            command = (
-                "AT*WHTTP=1,"
-                "POST,"
-                "ltop-pre-tb-api-server.onrender.com"
-                "/api/v1/tb/data,"
-                "443,,,"
-                f"{data}"
+            data_command = (
+                f"AT*WHTTP=2,DATA,{data}"
             )
 
             config_response = send_command(
                 ser,
-                command,
+                data_command,
                 timeout=2
             )
 
             if "OK" not in config_response:
 
                 print(
-                    f"[FAIL] "
-                    f"test={test_no} "
-                    f"HTTP 설정 실패"
+                    f"[FAIL] sequence={sequence} "
+                    f"DATA 설정 실패"
                 )
 
                 fail_count += 1
-                failed_tests.append(test_no)
+                failed_sequences.append(sequence)
 
                 continue
 
-            # ------------------------------------------------
-            # 실제 HTTPS 요청
-            # ------------------------------------------------
+            # -----------------------------
+            # HTTP 실행
+            # -----------------------------
 
             completed, response, rtt = (
                 execute_http(
@@ -286,15 +229,11 @@ def main():
                 )
             )
 
-            # ------------------------------------------------
-            # ACK 확인
-            # ------------------------------------------------
-
             if (
                 completed
                 and check_ack(
                     response,
-                    equip_id
+                    sequence
                 )
             ):
 
@@ -303,18 +242,18 @@ def main():
 
                 print(
                     f"[SUCCESS] "
-                    f"equip_id={equip_id} "
+                    f"sequence={sequence} "
                     f"RTT={rtt * 1000:.0f} ms"
                 )
 
             else:
 
                 fail_count += 1
-                failed_tests.append(test_no)
+                failed_sequences.append(sequence)
 
                 print(
                     f"[FAIL] "
-                    f"test={test_no} "
+                    f"sequence={sequence} "
                     f"RTT={rtt * 1000:.0f} ms"
                 )
 
@@ -323,13 +262,13 @@ def main():
             - total_start
         )
 
-    # ========================================================
+    # ---------------------------------
     # 결과
-    # ========================================================
+    # ---------------------------------
 
     print("\n")
     print("=" * 60)
-    print("LTE TB 데이터 통신 시험 결과")
+    print("LTE 최적화 통신 시험 결과")
     print("=" * 60)
 
     print(f"총 송신       : {TEST_COUNT}")
@@ -378,8 +317,8 @@ def main():
     )
 
     print(
-        f"실패 Test     : "
-        f"{failed_tests}"
+        f"실패 Sequence : "
+        f"{failed_sequences}"
     )
 
     print("=" * 60)
