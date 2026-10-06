@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Form
 from pydantic import BaseModel
 
 
@@ -22,7 +22,7 @@ def health():
     }
 
 
-# TB 데이터 수신
+# TB 데이터 수신 - JSON
 @app.post("/api/v1/tb/data")
 def receive_tb_data(data: TBData):
 
@@ -36,7 +36,8 @@ def receive_tb_data(data: TBData):
         "sequence": data.sequence
     }
 
-# LTE 모뎀 통신 테스트용
+
+# LTE 모뎀 통신 테스트용 - Form
 @app.post("/api/v1/tb/test")
 def receive_tb_test(
     sequence: int = Form(...),
