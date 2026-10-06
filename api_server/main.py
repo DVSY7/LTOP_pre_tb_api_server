@@ -35,3 +35,19 @@ def receive_tb_data(data: TBData):
         "result": "OK",
         "sequence": data.sequence
     }
+
+# LTE 모뎀 통신 테스트용
+@app.post("/api/v1/tb/test")
+def receive_tb_test(
+    sequence: int = Form(...),
+    message: str = Form(...)
+):
+    print(
+        f"[LTE RECV] sequence={sequence}, "
+        f"message={message}"
+    )
+
+    return {
+        "result": "OK",
+        "sequence": sequence
+    }

@@ -9,7 +9,6 @@ def send_at(ser, command, wait=1):
     ser.reset_input_buffer()
 
     print(f"\n[SEND] {command}")
-
     ser.write((command + "\r\n").encode())
     ser.flush()
 
@@ -34,18 +33,18 @@ ser = serial.Serial(
 
 time.sleep(1)
 
-# 기본 통신 확인
+# 모뎀 확인
 send_at(ser, "AT")
 
-# LTE 데이터 연결 확인
+# LTE 연결 확인
 send_at(ser, "AT+CGATT?")
 send_at(ser, "AT+CGACT?")
 send_at(ser, "AT+CGPADDR=1")
 
-# HTTP GET 설정
+# HTTPS POST 설정
 send_at(
     ser,
-    "AT*WHTTP=0,GET,httpbin.org/get,80",
+    "AT*WHTTP=1,POST,ltop-pre-tb-api-server.onrender.com/api/v1/tb/test,443,,,sequence=1&message=TEST",
     wait=2
 )
 
@@ -56,11 +55,11 @@ send_at(
     wait=1
 )
 
-# HTTP 요청 실행
+# 실제 POST 실행
 send_at(
     ser,
     "AT*WHTTP=3",
-    wait=10
+    wait=15
 )
 
 ser.close()
