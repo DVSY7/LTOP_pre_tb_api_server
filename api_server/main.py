@@ -47,3 +47,25 @@ def receive_tb_data(
         "result": "OK",
         "equip_id": equip_id
     }
+
+@app.post("/api/v1/tb/test-data")
+def receive_tb_test_data(
+    site_id: int = Form(...),
+    equip_id: str = Form(...),
+    bettery: float = Form(...),
+    inner_temp: float = Form(...),
+    corrol_volt: float = Form(...)
+):
+    print(
+        f"[TB TEST RECV] "
+        f"site_id={site_id}, "
+        f"equip_id={equip_id}, "
+        f"bettery={bettery}, "
+        f"inner_temp={inner_temp}, "
+        f"corrol_volt={corrol_volt}"
+    )
+
+    return {
+        "result": "OK",
+        "equip_id": equip_id
+    }

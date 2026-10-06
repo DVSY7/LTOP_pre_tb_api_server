@@ -1,14 +1,22 @@
 import serial
 import time
 
+
+# ============================================================
+# 설정
+# ============================================================
+
 PORT = "COM8"
 BAUDRATE = 115200
 
-# 처음에는 1건으로 확인
-# 정상 확인 후 100으로 변경
+# 우선 1회만 테스트
 TEST_COUNT = 1
 
 RESPONSE_TIMEOUT = 15
+
+HOST = "ltop-pre-tb-api-server.onrender.com"
+PATH = "/api/v1/tb/test-data"
+PORT_HTTPS = 443
 
 
 # ============================================================
@@ -59,7 +67,7 @@ def execute_http(ser, timeout=15):
 
     ser.reset_input_buffer()
 
-    print("[SEND] AT*WHTTP=3")
+    print("\n[SEND] AT*WHTTP=3")
 
     start_time = time.perf_counter()
 
@@ -95,7 +103,7 @@ def execute_http(ser, timeout=15):
 
                 return True, response, rtt
 
-            # HTTP 실행 실패
+            # 실행 실패
             if "*WHTTPR:EXEC_FAILED" in response:
 
                 rtt = (
@@ -128,9 +136,12 @@ def execute_http(ser, timeout=15):
 
 def check_ack(response, equip_id):
 
+    expected_result = '"result":"OK"'
+    expected_equip = f'"equip_id":"{equip_id}"'
+
     return (
-        '"result":"OK"' in response
-        and f'"equip_id":"{equip_id}"' in response
+        expected_result in response
+        and expected_equip in response
     )
 
 
@@ -147,20 +158,13 @@ def main():
     failed_tests = []
 
     print("=" * 60)
-    print("WD-L700K LTE TB 데이터 통신 시험")
-    print("실제 stat_tb 컬럼 기반 데이터")
+    print("WD-L700K LTE TB 데이터 길이 테스트")
+    print("5개 필드 전송")
     print("=" * 60)
 
     # ========================================================
-    # 테스트용 TB 데이터
+    # 테스트 데이터
     # ========================================================
-
-    # DB 자동 생성
-    #
-    # t_no         -> AUTO_INCREMENT
-    # measure_time -> CURRENT_TIMESTAMP
-    #
-    # 따라서 위 두 값은 TB에서 전송하지 않음
 
     site_id = 1
     equip_id = "TB001"
@@ -169,17 +173,29 @@ def main():
     inner_temp = 25.4
     corrol_volt = -920.5
 
-    op_status_id = 1
-    op_mode_id = 1
-    error_code_id = 0
+    # ========================================================
+    # 실제 전송 DATA 생성
+    # ========================================================
 
-    area_id = 1
-    branch_id = 1
+    payload = (
+        f"site_id={site_id}"
+        f"&equip_id={equip_id}"
+        f"&bettery={bettery}"
+        f"&inner_temp={inner_temp}"
+        f"&corrol_volt={corrol_volt}"
+    )
 
-    inner_humidity = 55.2
+    # WD-L700K에서 & 처리 문제 방지를 위해
+    # 전체 DATA를 작은따옴표로 감싼다.
+    data = f"'{payload}'"
 
-    max_set_volt = -850
-    min_set_volt = -2500
+    print("\n[PAYLOAD]")
+    print(payload)
+
+    print(
+        f"\nPayload length : "
+        f"{len(payload.encode('utf-8'))} bytes"
+    )
 
     # ========================================================
     # Serial 연결
@@ -197,10 +213,25 @@ def main():
         # LTE 상태 확인
         # ----------------------------------------------------
 
-        send_command(ser, "AT")
-        send_command(ser, "AT+CGATT?")
-        send_command(ser, "AT+CGACT?")
-        send_command(ser, "AT+CGPADDR=1")
+        send_command(
+            ser,
+            "AT"
+        )
+
+        send_command(
+            ser,
+            "AT+CGATT?"
+        )
+
+        send_command(
+            ser,
+            "AT+CGACT?"
+        )
+
+        send_command(
+            ser,
+            "AT+CGPADDR=1"
+        )
 
         print("\n" + "=" * 60)
         print("TB 데이터 전송 테스트 시작")
@@ -209,7 +240,7 @@ def main():
         total_start = time.perf_counter()
 
         # ====================================================
-        # 데이터 전송
+        # 전송
         # ====================================================
 
         for test_no in range(
@@ -222,37 +253,15 @@ def main():
             )
 
             # ------------------------------------------------
-            # 실제 TB 데이터 생성
-            # ------------------------------------------------
-
-            data = (
-                "'"
-                f"site_id={site_id}"
-                f"&equip_id={equip_id}"
-                f"&bettery={bettery}"
-                f"&inner_temp={inner_temp}"
-                f"&corrol_volt={corrol_volt}"
-                f"&op_status_id={op_status_id}"
-                f"&op_mode_id={op_mode_id}"
-                f"&error_code_id={error_code_id}"
-                f"&area_id={area_id}"
-                f"&branch_id={branch_id}"
-                f"&inner_humidity={inner_humidity}"
-                f"&max_set_volt={max_set_volt}"
-                f"&min_set_volt={min_set_volt}"
-                "'"
-            )
-
-            # ------------------------------------------------
-            # 매회 전체 HTTP 설정
+            # HTTP 설정
             # ------------------------------------------------
 
             command = (
                 "AT*WHTTP=1,"
                 "POST,"
-                "ltop-pre-tb-api-server.onrender.com"
-                "/api/v1/tb/data,"
-                "443,,,"
+                f"{HOST}"
+                f"{PATH},"
+                f"{PORT_HTTPS},,,"
                 f"{data}"
             )
 
@@ -261,6 +270,10 @@ def main():
                 command,
                 timeout=2
             )
+
+            # ------------------------------------------------
+            # HTTP 설정 결과 확인
+            # ------------------------------------------------
 
             if "OK" not in config_response:
 
@@ -276,7 +289,7 @@ def main():
                 continue
 
             # ------------------------------------------------
-            # 실제 HTTPS 요청
+            # 실제 HTTPS 요청 실행
             # ------------------------------------------------
 
             completed, response, rtt = (
@@ -302,7 +315,7 @@ def main():
                 rtt_list.append(rtt)
 
                 print(
-                    f"[SUCCESS] "
+                    f"\n[SUCCESS] "
                     f"equip_id={equip_id} "
                     f"RTT={rtt * 1000:.0f} ms"
                 )
@@ -313,7 +326,7 @@ def main():
                 failed_tests.append(test_no)
 
                 print(
-                    f"[FAIL] "
+                    f"\n[FAIL] "
                     f"test={test_no} "
                     f"RTT={rtt * 1000:.0f} ms"
                 )
@@ -329,16 +342,34 @@ def main():
 
     print("\n")
     print("=" * 60)
-    print("LTE TB 데이터 통신 시험 결과")
+    print("LTE TB 데이터 길이 테스트 결과")
     print("=" * 60)
 
-    print(f"총 송신       : {TEST_COUNT}")
-    print(f"성공          : {success_count}")
-    print(f"실패          : {fail_count}")
+    print(
+        f"Payload       : "
+        f"{len(payload.encode('utf-8'))} bytes"
+    )
+
+    print(
+        f"총 송신       : "
+        f"{TEST_COUNT}"
+    )
+
+    print(
+        f"성공          : "
+        f"{success_count}"
+    )
+
+    print(
+        f"실패          : "
+        f"{fail_count}"
+    )
 
     success_rate = (
-        success_count / TEST_COUNT
-    ) * 100
+        success_count
+        / TEST_COUNT
+        * 100
+    )
 
     print(
         f"성공률        : "
