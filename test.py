@@ -9,7 +9,6 @@ import time
 PORT = "COM8"
 BAUDRATE = 115200
 
-TEST_COUNT = 1
 RESPONSE_TIMEOUT = 15
 
 HOST = "ltop-pre-tb-api-server.onrender.com"
@@ -30,7 +29,6 @@ def send_command(ser, command, timeout=2):
     ser.write(
         (command + "\r\n").encode()
     )
-
     ser.flush()
 
     end_time = time.time() + timeout
@@ -75,10 +73,7 @@ def execute_http(ser, timeout=15):
 
     start_time = time.perf_counter()
 
-    ser.write(
-        b"AT*WHTTP=3\r\n"
-    )
-
+    ser.write(b"AT*WHTTP=3\r\n")
     ser.flush()
 
     response = ""
@@ -99,10 +94,7 @@ def execute_http(ser, timeout=15):
 
             if "*WHTTPR:COMPLETED" in response:
 
-                rtt = (
-                    time.perf_counter()
-                    - start_time
-                )
+                rtt = time.perf_counter() - start_time
 
                 print("[RECV]")
                 print(response.strip())
@@ -111,10 +103,7 @@ def execute_http(ser, timeout=15):
 
             if "*WHTTPR:EXEC_FAILED" in response:
 
-                rtt = (
-                    time.perf_counter()
-                    - start_time
-                )
+                rtt = time.perf_counter() - start_time
 
                 print("[RECV]")
                 print(response.strip())
@@ -123,10 +112,7 @@ def execute_http(ser, timeout=15):
 
         time.sleep(0.01)
 
-    rtt = (
-        time.perf_counter()
-        - start_time
-    )
+    rtt = time.perf_counter() - start_time
 
     print("[TIMEOUT]")
     print(response.strip())
@@ -142,9 +128,7 @@ def check_ack(response, equip_id):
 
     return (
         '"result":"OK"' in response
-        and
-        f'"equip_id":"{equip_id}"'
-        in response
+        and f'"equip_id":"{equip_id}"' in response
     )
 
 
@@ -154,89 +138,52 @@ def check_ack(response, equip_id):
 
 def main():
 
-    success_count = 0
-    fail_count = 0
-
-    rtt_list = []
-    failed_tests = []
-
     print("=" * 60)
-    print("WD-L700K LTE TB Protocol v1 시험")
-    print("Short Key-Value 방식")
+    print("PRE TB LTE -> API 전송 시험")
     print("=" * 60)
 
-    # ========================================================
-    # Protocol Version
-    # ========================================================
+    # --------------------------------------------------------
+    # TB 테스트 데이터
+    # --------------------------------------------------------
 
-    protocol_version = 1
-
-    # ========================================================
-    # 실제 TB 데이터
-    # ========================================================
-
-    site_id = 1
     equip_id = "TB001"
-
     bettery = 3.7
     inner_temp = 25.4
     corrol_volt = -920.5
-
-    op_status_id = 1
-    op_mode_id = 1
-    error_code_id = 0
-
-    area_id = 1
-    branch_id = 1
-
     inner_humidity = 55.2
 
-    max_set_volt = -850
-    min_set_volt = -2500
-
-    # ========================================================
-    # 축약 Protocol Payload 생성
-    # ========================================================
+    # --------------------------------------------------------
+    # Payload 생성
+    # --------------------------------------------------------
 
     payload = (
-        f"v={protocol_version}"
-        f"&s={site_id}"
-        f"&e={equip_id}"
+        f"e={equip_id}"
         f"&b={bettery}"
         f"&t={inner_temp}"
         f"&cv={corrol_volt}"
-        f"&os={op_status_id}"
-        f"&om={op_mode_id}"
-        f"&ec={error_code_id}"
-        f"&a={area_id}"
-        f"&br={branch_id}"
         f"&h={inner_humidity}"
-        f"&max={max_set_volt}"
-        f"&min={min_set_volt}"
     )
 
-    payload_bytes = len(
-        payload.encode("utf-8")
-    )
+    payload_bytes = len(payload.encode("utf-8"))
 
-    # WD-L700K에서 & 처리를 위해
-    # 전체 DATA를 작은따옴표로 감싼다.
+    # WD-L700K에서 & 문자를 포함한 DATA 전체를 작은따옴표로 감싼다.
     data = f"'{payload}'"
 
-    print("\n[PROTOCOL]")
-    print("Version : 1")
+    print("\n[TB DATA]")
+    print(f"equip_id       : {equip_id}")
+    print(f"bettery        : {bettery}")
+    print(f"inner_temp     : {inner_temp}")
+    print(f"corrol_volt    : {corrol_volt}")
+    print(f"inner_humidity : {inner_humidity}")
 
     print("\n[PAYLOAD]")
     print(payload)
 
-    print(
-        f"\nPayload length : "
-        f"{payload_bytes} bytes"
-    )
+    print(f"\nPayload length : {payload_bytes} bytes")
 
-    # ========================================================
+    # --------------------------------------------------------
     # Serial 연결
-    # ========================================================
+    # --------------------------------------------------------
 
     with serial.Serial(
         port=PORT,
@@ -247,7 +194,7 @@ def main():
         time.sleep(1)
 
         # ----------------------------------------------------
-        # LTE 상태 확인
+        # 모뎀 / LTE 상태 확인
         # ----------------------------------------------------
 
         send_command(
@@ -271,196 +218,75 @@ def main():
         )
 
         print("\n" + "=" * 60)
-        print("TB Protocol v1 전송 시작")
+        print("TB 데이터 전송")
         print("=" * 60)
 
-        total_start = (
-            time.perf_counter()
+        # ----------------------------------------------------
+        # WHTTP 설정
+        # ----------------------------------------------------
+
+        command = (
+            "AT*WHTTP=1,"
+            "POST,"
+            f"{HOST}{PATH},"
+            f"{HTTPS_PORT},,,"
+            f"{data}"
         )
 
-        # ====================================================
-        # 전송
-        # ====================================================
+        config_response = send_command(
+            ser,
+            command,
+            timeout=2
+        )
 
-        for test_no in range(
-            1,
-            TEST_COUNT + 1
+        # ----------------------------------------------------
+        # WHTTP 설정 확인
+        # ----------------------------------------------------
+
+        if "OK" not in config_response:
+
+            print("\n[FAIL] WHTTP 설정 실패")
+            return
+
+        # ----------------------------------------------------
+        # HTTPS POST 실행
+        # ----------------------------------------------------
+
+        completed, response, rtt = execute_http(
+            ser,
+            timeout=RESPONSE_TIMEOUT
+        )
+
+        # ----------------------------------------------------
+        # 결과 확인
+        # ----------------------------------------------------
+
+        if completed and check_ack(
+            response,
+            equip_id
         ):
 
-            print(
-                f"\n[{test_no}/{TEST_COUNT}]"
-            )
+            print("\n" + "=" * 60)
+            print("전송 성공")
+            print("=" * 60)
 
-            # ------------------------------------------------
-            # WHTTP 설정
-            # ------------------------------------------------
+            print(f"equip_id       : {equip_id}")
+            print(f"Payload        : {payload_bytes} bytes")
+            print(f"RTT            : {rtt * 1000:.0f} ms")
+            print("API ACK         : OK")
 
-            command = (
-                "AT*WHTTP=1,"
-                "POST,"
-                f"{HOST}{PATH},"
-                f"{HTTPS_PORT},,,"
-                f"{data}"
-            )
+        else:
 
-            config_response = (
-                send_command(
-                    ser,
-                    command,
-                    timeout=2
-                )
-            )
+            print("\n" + "=" * 60)
+            print("전송 실패")
+            print("=" * 60)
 
-            # ------------------------------------------------
-            # 설정 성공 확인
-            # ------------------------------------------------
+            print(f"equip_id       : {equip_id}")
+            print(f"Payload        : {payload_bytes} bytes")
+            print(f"RTT            : {rtt * 1000:.0f} ms")
 
-            if "OK" not in config_response:
-
-                print(
-                    f"[FAIL] "
-                    f"test={test_no} "
-                    f"WHTTP 설정 실패"
-                )
-
-                fail_count += 1
-
-                failed_tests.append(
-                    test_no
-                )
-
-                continue
-
-            # ------------------------------------------------
-            # HTTPS 요청 실행
-            # ------------------------------------------------
-
-            completed, response, rtt = (
-                execute_http(
-                    ser,
-                    timeout=RESPONSE_TIMEOUT
-                )
-            )
-
-            # ------------------------------------------------
-            # ACK 확인
-            # ------------------------------------------------
-
-            if (
-                completed
-                and check_ack(
-                    response,
-                    equip_id
-                )
-            ):
-
-                success_count += 1
-                rtt_list.append(rtt)
-
-                print(
-                    f"\n[SUCCESS] "
-                    f"equip_id={equip_id} "
-                    f"RTT="
-                    f"{rtt * 1000:.0f} ms"
-                )
-
-            else:
-
-                fail_count += 1
-
-                failed_tests.append(
-                    test_no
-                )
-
-                print(
-                    f"\n[FAIL] "
-                    f"test={test_no} "
-                    f"RTT="
-                    f"{rtt * 1000:.0f} ms"
-                )
-
-        total_elapsed = (
-            time.perf_counter()
-            - total_start
-        )
-
-    # ========================================================
-    # 결과
-    # ========================================================
-
-    print("\n")
-    print("=" * 60)
-    print("TB Protocol v1 시험 결과")
-    print("=" * 60)
-
-    print(
-        f"Protocol       : v1"
-    )
-
-    print(
-        f"Payload        : "
-        f"{payload_bytes} bytes"
-    )
-
-    print(
-        f"총 송신        : "
-        f"{TEST_COUNT}"
-    )
-
-    print(
-        f"성공           : "
-        f"{success_count}"
-    )
-
-    print(
-        f"실패           : "
-        f"{fail_count}"
-    )
-
-    success_rate = (
-        success_count
-        / TEST_COUNT
-        * 100
-    )
-
-    print(
-        f"성공률         : "
-        f"{success_rate:.1f}%"
-    )
-
-    if rtt_list:
-
-        avg_rtt = (
-            sum(rtt_list)
-            / len(rtt_list)
-        )
-
-        print(
-            f"평균 RTT       : "
-            f"{avg_rtt * 1000:.0f} ms"
-        )
-
-        print(
-            f"최소 RTT       : "
-            f"{min(rtt_list) * 1000:.0f} ms"
-        )
-
-        print(
-            f"최대 RTT       : "
-            f"{max(rtt_list) * 1000:.0f} ms"
-        )
-
-    print(
-        f"전체 소요시간  : "
-        f"{total_elapsed:.2f} sec"
-    )
-
-    print(
-        f"실패 Test      : "
-        f"{failed_tests}"
-    )
-
-    print("=" * 60)
+            print("\n[SERVER RESPONSE]")
+            print(response)
 
 
 if __name__ == "__main__":
